@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from app import (
     catalog_id_from_row,
+    clean_keywords,
     load_catalog,
     load_profile,
     normalize_list,
@@ -27,6 +28,12 @@ class TasteSpaceAppTests(unittest.TestCase):
     def test_normalize_list_handles_old_and_new_genres(self):
         self.assertEqual(normalize_list(["science fiction", "adventure"]), ["science fiction", "adventure"])
         self.assertEqual(normalize_list("action & adventure"), ["action", "adventure"])
+
+    def test_clean_keywords_removes_tmdb_noise(self):
+        self.assertEqual(
+            clean_keywords(["aftercreditsstinger", "serial killer", "amused", "neo_noir"]),
+            ["serial killer", "neo noir"],
+        )
 
     def test_load_catalog_builds_structured_embedding_text(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -1,4 +1,5 @@
 import argparse
+from datetime import date
 import json
 import os
 import sys
@@ -17,6 +18,21 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 TMDB_BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w780"
 USER_AGENT = "TasteSpace/0.1"
+KEYWORD_BLOCKLIST = {
+    "aftercreditsstinger",
+    "duringcreditsstinger",
+    "amused",
+    "excited",
+    "cheerful",
+    "nostalgic",
+    "complex",
+    "dramatic",
+    "suspenseful",
+    "hilarious",
+    "absurd",
+    "3d animation",
+}
+SourceSpec = tuple[str, str, dict[str, Any]]
 
 
 def load_dotenv(path: Path) -> None:
@@ -97,15 +113,86 @@ def load_genres(api_key: str, language: str) -> dict[str, dict[int, str]]:
     }
 
 
-def tmdb_sources() -> list[tuple[str, str]]:
+def base_tmdb_sources() -> list[SourceSpec]:
     return [
-        ("movie", "trending/movie/week"),
-        ("series", "trending/tv/week"),
-        ("movie", "movie/popular"),
-        ("series", "tv/popular"),
-        ("movie", "movie/top_rated"),
-        ("series", "tv/top_rated"),
+        ("movie", "trending/movie/week", {}),
+        ("series", "trending/tv/week", {}),
+        ("movie", "movie/popular", {}),
+        ("series", "tv/popular", {}),
+        ("movie", "movie/top_rated", {}),
+        ("series", "tv/top_rated", {}),
     ]
+
+
+def year_windows(start_year: int = 1960, window_size: int = 5) -> list[tuple[int, int]]:
+    current_year = date.today().year
+    windows: list[tuple[int, int]] = []
+    end_year = current_year
+    while end_year >= start_year:
+        first_year = max(start_year, end_year - window_size + 1)
+        windows.append((first_year, end_year))
+        end_year = first_year - 1
+    return windows
+
+
+def discover_params(
+    media_type: str,
+    min_votes: int,
+    year_range: tuple[int, int] | None = None,
+    genre_id: int | None = None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "include_adult": "false",
+        "include_video": "false",
+        "sort_by": "popularity.desc",
+        "vote_count.gte": min_votes,
+    }
+    if genre_id is not None:
+        params["with_genres"] = genre_id
+
+    if year_range is not None:
+        start_year, end_year = year_range
+        if media_type == "movie":
+            params["primary_release_date.gte"] = f"{start_year}-01-01"
+            params["primary_release_date.lte"] = f"{end_year}-12-31"
+        else:
+            params["first_air_date.gte"] = f"{start_year}-01-01"
+            params["first_air_date.lte"] = f"{end_year}-12-31"
+
+    return params
+
+
+def tmdb_sources(
+    genres_by_type: dict[str, dict[int, str]],
+    min_votes: int,
+    include_discover: bool,
+) -> list[SourceSpec]:
+    sources = base_tmdb_sources()
+    if not include_discover:
+        return sources
+
+    for media_type, endpoint in (("movie", "discover/movie"), ("series", "discover/tv")):
+        sources.append((media_type, endpoint, discover_params(media_type, min_votes)))
+
+        for year_range in year_windows():
+            sources.append(
+                (
+                    media_type,
+                    endpoint,
+                    discover_params(media_type, min_votes, year_range=year_range),
+                )
+            )
+
+        for genre_id in genres_by_type[media_type]:
+            sources.append(
+                (
+                    media_type,
+                    endpoint,
+                    discover_params(media_type, min_votes, genre_id=genre_id),
+                )
+            )
+
+    return sources
 
 
 def external_imdb_id(api_key: str, media_type: str, tmdb_id: int) -> str | None:
@@ -177,13 +264,18 @@ def keyword_names(details: dict[str, Any], media_type: str) -> list[str]:
     else:
         items = raw_keywords.get("results", [])
 
-    return [
-        keyword["name"].strip().lower()
-        for keyword in items
-        if isinstance(keyword, dict)
-        and isinstance(keyword.get("name"), str)
-        and keyword["name"].strip()
-    ][:20]
+    names: list[str] = []
+    for keyword in items:
+        if not isinstance(keyword, dict) or not isinstance(keyword.get("name"), str):
+            continue
+        name = " ".join(keyword["name"].lower().replace("_", " ").split())
+        if not name or name in KEYWORD_BLOCKLIST:
+            continue
+        if len(name) < 3 or name.isdigit():
+            continue
+        if name not in names:
+            names.append(name)
+    return names[:16]
 
 
 def cast_names(details: dict[str, Any]) -> list[str]:
@@ -321,6 +413,7 @@ def fetch_source_items(
     api_key: str,
     media_type: str,
     endpoint: str,
+    params: dict[str, Any],
     pages: int,
     language: str,
 ) -> list[dict[str, Any]]:
@@ -331,6 +424,7 @@ def fetch_source_items(
             endpoint,
             api_key,
             {
+                **params,
                 "language": language,
                 "page": page,
             },
@@ -350,19 +444,35 @@ def import_catalog(
     limit: int,
     language: str,
     sleep_seconds: float,
+    min_votes: int,
+    include_discover: bool,
 ) -> list[dict[str, Any]]:
     genres_by_type = load_genres(api_key, language)
     catalog: list[dict[str, Any]] = []
     seen_imdb_ids: set[str] = set()
+    seen_tmdb_ids: set[tuple[str, int]] = set()
 
-    for media_type, endpoint in tmdb_sources():
-        print(f"Fetching {endpoint}...", file=sys.stderr)
-        source_items = fetch_source_items(api_key, media_type, endpoint, pages, language)
+    for media_type, endpoint, params in tmdb_sources(genres_by_type, min_votes, include_discover):
+        source_label = endpoint
+        if params.get("with_genres"):
+            genre_name = genres_by_type[media_type].get(int(params["with_genres"]), params["with_genres"])
+            source_label = f"{endpoint} genre={genre_name}"
+        elif params.get("primary_release_date.gte") or params.get("first_air_date.gte"):
+            start = params.get("primary_release_date.gte") or params.get("first_air_date.gte")
+            end = params.get("primary_release_date.lte") or params.get("first_air_date.lte")
+            source_label = f"{endpoint} years={str(start)[:4]}-{str(end)[:4]}"
+
+        print(f"Fetching {source_label}...", file=sys.stderr)
+        source_items = fetch_source_items(api_key, media_type, endpoint, params, pages, language)
 
         for item in source_items:
             tmdb_id = item.get("id")
             if not isinstance(tmdb_id, int):
                 continue
+            tmdb_key = (media_type, tmdb_id)
+            if tmdb_key in seen_tmdb_ids:
+                continue
+            seen_tmdb_ids.add(tmdb_key)
 
             details = tmdb_details(api_key, media_type, tmdb_id, language)
             external_ids = details.get("external_ids", {})
@@ -429,6 +539,17 @@ def parse_args() -> argparse.Namespace:
         help="Seconds to sleep between external ID lookups.",
     )
     parser.add_argument(
+        "--min-votes",
+        type=int,
+        default=50,
+        help="Minimum TMDB vote count for discover sources.",
+    )
+    parser.add_argument(
+        "--no-discover",
+        action="store_true",
+        help="Only use trending/popular/top-rated sources.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Fetch and validate items without writing catalog.json.",
@@ -454,6 +575,8 @@ def main() -> int:
         limit=max(1, args.limit),
         language=args.language,
         sleep_seconds=max(0.0, args.sleep),
+        min_votes=max(0, args.min_votes),
+        include_discover=not args.no_discover,
     )
 
     if args.dry_run:

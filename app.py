@@ -20,6 +20,7 @@ from sklearn.cluster import KMeans
 APP_VERSION = "0.1.0"
 MODEL_NAME = "all-MiniLM-L6-v2"
 STREMIO_CATALOG_ID = "taste-space"
+STREMIO_WATCHLIST_CATALOG_ID = "taste-space-watchlist"
 STREMIO_PAGE_SIZE = 100
 SEMANTIC_WEIGHT = 0.76
 QUALITY_WEIGHT = 0.14
@@ -33,6 +34,20 @@ CACHE_DIR = BASE_DIR / "data" / "cache"
 PROFILE_PATH = BASE_DIR / "data" / "taste_profile.json"
 UI_DIR = BASE_DIR / "ui"
 CATALOG_REQUIRED_FIELDS = {"id", "type", "name", "genres", "overview"}
+KEYWORD_BLOCKLIST = {
+    "aftercreditsstinger",
+    "duringcreditsstinger",
+    "amused",
+    "excited",
+    "cheerful",
+    "nostalgic",
+    "complex",
+    "dramatic",
+    "suspenseful",
+    "hilarious",
+    "absurd",
+    "3d animation",
+}
 DEFAULT_PROFILE = {
     "liked": [],
     "disliked": [],
@@ -146,6 +161,20 @@ def normalize_list(value: Any) -> list[str]:
     return []
 
 
+def clean_keywords(value: Any) -> list[str]:
+    keywords = normalize_list(value)
+    cleaned: list[str] = []
+    for keyword in keywords:
+        normalized = " ".join(keyword.lower().replace("_", " ").split())
+        if not normalized or normalized in KEYWORD_BLOCKLIST:
+            continue
+        if len(normalized) < 3 or normalized.isdigit():
+            continue
+        if normalized not in cleaned:
+            cleaned.append(normalized)
+    return cleaned[:16]
+
+
 def normalized_number(value: Any, default: float = 0.0) -> float:
     if isinstance(value, (int, float)) and not pd.isna(value):
         return float(value)
@@ -157,7 +186,7 @@ def build_embedding_text(row: pd.Series) -> str:
         ("Title", row.get("name")),
         ("Type", row.get("type")),
         ("Genres", row.get("genres")),
-        ("Keywords", row.get("keywords")),
+        ("Keywords", clean_keywords(row.get("keywords"))),
         ("Tagline", row.get("tagline")),
         ("Cast", row.get("cast")),
         ("Crew", row.get("directors") or row.get("creators")),
@@ -181,6 +210,8 @@ def load_catalog(path: Path) -> pd.DataFrame:
         raise ValueError(f"Catalog is missing required fields: {fields}")
 
     catalog_df["genres_list"] = catalog_df["genres"].apply(normalize_list)
+    if "keywords" in catalog_df:
+        catalog_df["keywords"] = catalog_df["keywords"].apply(clean_keywords)
     catalog_df["text"] = catalog_df.apply(build_embedding_text, axis=1)
     catalog_df["quality_score"] = catalog_df.apply(catalog_quality_score, axis=1)
     catalog_df["popularity_score"] = (
@@ -622,6 +653,29 @@ def semantic_recommendations(media_type: str, vibe: str | None, limit: int) -> l
     ]
 
 
+def profile_catalog_items(media_type: str, list_name: str, limit: int, skip: int = 0) -> list[dict]:
+    profile = load_profile()
+    item_ids = profile.get(list_name, [])
+    if not isinstance(item_ids, list):
+        return []
+
+    catalog_df = get_base_catalog()
+    if media_type != "all":
+        catalog_df = catalog_df[catalog_df["type"] == media_type]
+
+    rows = catalog_df[catalog_df["id"].isin(item_ids)]
+    by_id = {
+        row["id"]: row_to_result(row)
+        for _, row in rows.iterrows()
+    }
+    ordered = [
+        by_id[item_id]
+        for item_id in item_ids
+        if item_id in by_id
+    ]
+    return ordered[skip:skip + limit]
+
+
 def parse_stremio_extra(extra: str | None) -> dict:
     if not extra:
         return {}
@@ -639,16 +693,25 @@ def stremio_catalog(media_type: str, catalog_id: str, extra: str | None = None) 
         return {"metas": []}
 
     vibe_preset = vibe_preset_for_catalog_id(catalog_id)
-    if catalog_id != STREMIO_CATALOG_ID and vibe_preset is None:
+    if catalog_id not in {STREMIO_CATALOG_ID, STREMIO_WATCHLIST_CATALOG_ID} and vibe_preset is None:
         return {"metas": []}
 
     extra_args = parse_stremio_extra(extra)
-    search = extra_args.get("search") or (vibe_preset["query"] if vibe_preset else None)
     try:
         skip = max(0, int(extra_args.get("skip", "0") or "0"))
     except ValueError:
         skip = 0
 
+    if catalog_id == STREMIO_WATCHLIST_CATALOG_ID:
+        page = profile_catalog_items(media_type, "watchlist", STREMIO_PAGE_SIZE, skip)
+        return {
+            "metas": [
+                result_to_stremio_meta(item)
+                for item in page
+            ]
+        }
+
+    search = extra_args.get("search") or (vibe_preset["query"] if vibe_preset else None)
     recommendations = semantic_recommendations(
         media_type=media_type,
         vibe=search,
@@ -676,6 +739,16 @@ def stremio_manifest():
                 "name": f"TasteSpace {label} For You",
                 "extra": [
                     {"name": "search", "isRequired": False},
+                    {"name": "skip", "isRequired": False},
+                ],
+            }
+        )
+        catalogs.append(
+            {
+                "type": media_type,
+                "id": STREMIO_WATCHLIST_CATALOG_ID,
+                "name": f"TasteSpace {label} Watchlist",
+                "extra": [
                     {"name": "skip", "isRequired": False},
                 ],
             }
@@ -1006,11 +1079,14 @@ def item_profile_state(item_id: str):
 
 @app.get("/profile/lists/{list_name}")
 def profile_list_items(
-    list_name: Literal["liked", "disliked", "favorites", "watchlist", "seen"],
+    list_name: Literal["liked", "disliked", "favorites", "watchlist", "seen", "rated"],
     limit: int = Query(50, ge=1, le=200),
 ):
     current_profile = load_profile()
-    item_ids = current_profile[list_name][:limit]
+    if list_name == "rated":
+        item_ids = list(current_profile["ratings"].keys())[:limit]
+    else:
+        item_ids = current_profile[list_name][:limit]
     catalog_df = get_base_catalog()
     rows = catalog_df[catalog_df["id"].isin(item_ids)]
     by_id = {

@@ -94,6 +94,22 @@ Then import:
 .venv/bin/python scripts/import_tmdb.py --pages 2 --limit 250
 ```
 
+For a larger home catalog, run this on the server machine:
+
+```bash
+.venv/bin/python scripts/import_tmdb.py --pages 20 --limit 5000 --min-votes 50
+```
+
+On Windows:
+
+```bat
+.venv\Scripts\python.exe scripts\import_tmdb.py --pages 20 --limit 5000 --min-votes 50
+```
+
+The importer uses trending/popular/top-rated lists plus TMDB discover sources by
+year windows and genre. `--limit` is still a ceiling; if you want broader
+coverage, increase `--pages`, lower `--min-votes`, or both.
+
 This writes normalized TMDB items to:
 
 ```txt

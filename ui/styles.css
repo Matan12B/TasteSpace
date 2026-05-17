@@ -254,6 +254,10 @@ select:focus {
   color: var(--danger);
 }
 
+.small.clear-rating {
+  color: var(--muted);
+}
+
 .small.heart {
   width: 34px;
   min-width: 34px;
@@ -280,6 +284,16 @@ select:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
+  background: #151a1e;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 64px;
+  text-align: left;
+}
+
+.stat:hover,
+.stat.active {
+  border-color: var(--accent);
 }
 
 .stat strong {

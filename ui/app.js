@@ -3,12 +3,21 @@ const topVibes = document.querySelector("#top-vibes");
 const manualVibes = document.querySelector("#manual-vibes");
 const searchForm = document.querySelector("#search-form");
 const searchResults = document.querySelector("#search-results");
-const watchlist = document.querySelector("#watchlist");
+const libraryTitle = document.querySelector("#library-title");
+const libraryList = document.querySelector("#library-list");
 const importButton = document.querySelector("#import-button");
 const importStatus = document.querySelector("#import-status");
 const vibeForm = document.querySelector("#vibe-form");
 
 let currentProfile = null;
+let activeLibrary = "watchlist";
+
+const libraries = {
+  rated: { label: "Seen & Rated", countKey: "rated" },
+  favorites: { label: "Hearts", countKey: "favorites" },
+  watchlist: { label: "Watchlist", countKey: "watchlist" },
+  disliked: { label: "Avoid", countKey: "disliked" },
+};
 
 async function request(path, options = {}) {
   const response = await fetch(path, options);
@@ -64,6 +73,12 @@ function renderStars(item) {
   return stars;
 }
 
+async function clearRating(item) {
+  await request(`/profile/ratings/${item.id}`, { method: "DELETE" });
+  await refreshAll();
+  await repeatSearch();
+}
+
 function actionButton(label, active, onClick, danger = false) {
   const button = document.createElement("button");
   button.type = "button";
@@ -107,6 +122,13 @@ function renderItem(item) {
   const actions = document.createElement("div");
   actions.className = "actions";
   actions.appendChild(renderStars(item));
+  if (state.rating) {
+    const clearButton = actionButton("Clear rating", false, async () => {
+      await clearRating(item);
+    });
+    clearButton.classList.add("clear-rating");
+    actions.appendChild(clearButton);
+  }
   const heartButton = actionButton("♥", state.favorite, async () => {
     const active = latestState(item.id).favorite;
     await request(`/profile/favorites/${item.id}`, { method: active ? "DELETE" : "POST" });
@@ -155,12 +177,19 @@ function renderItems(container, items, emptyText) {
 function renderProfile(profile) {
   currentProfile = profile;
   const matches = profile.catalog_matches || {};
-  profileStats.innerHTML = [
-    ["Rated", matches.rated || 0],
-    ["Hearts", matches.favorites || 0],
-    ["Watchlist", matches.watchlist || 0],
-    ["Seen", matches.seen || 0],
-  ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+  profileStats.innerHTML = "";
+  Object.entries(libraries).forEach(([key, config]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `stat ${activeLibrary === key ? "active" : ""}`;
+    button.innerHTML = `<strong>${matches[config.countKey] || 0}</strong><span>${config.label}</span>`;
+    button.addEventListener("click", async () => {
+      activeLibrary = key;
+      renderProfile(currentProfile);
+      await loadLibrary();
+    });
+    profileStats.appendChild(button);
+  });
 
   manualVibes.innerHTML = "";
   (profile.vibes || []).forEach((vibe) => {
@@ -181,12 +210,14 @@ async function loadProfile() {
   renderProfile(profile);
 }
 
-async function loadWatchlist() {
+async function loadLibrary() {
   try {
-    const data = await request("/profile/lists/watchlist");
-    renderItems(watchlist, data.results || [], "No watchlist items yet.");
+    const label = libraries[activeLibrary]?.label || "Library";
+    libraryTitle.textContent = label;
+    const data = await request(`/profile/lists/${activeLibrary}`);
+    renderItems(libraryList, data.results || [], `No ${label.toLowerCase()} items yet.`);
   } catch (error) {
-    renderItems(watchlist, [], `Watchlist unavailable: ${error.message}`);
+    renderItems(libraryList, [], `List unavailable: ${error.message}`);
   }
 }
 
@@ -212,7 +243,7 @@ async function loadTopVibes() {
 
 async function refreshAll() {
   await loadProfile();
-  await loadWatchlist();
+  await loadLibrary();
   loadTopVibes();
 }
 
