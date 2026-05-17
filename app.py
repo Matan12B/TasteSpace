@@ -352,6 +352,13 @@ def catalog_indexes_for_ids(item_ids: list[str]) -> np.ndarray:
     return catalog_df.index[catalog_df["id"].isin(item_ids)].to_numpy()
 
 
+def base_catalog_match_count(item_ids: list[str]) -> int:
+    if not item_ids:
+        return 0
+    catalog_df = get_base_catalog()
+    return int(catalog_df["id"].isin(item_ids).sum())
+
+
 def weighted_item_vector(item_weights: dict[str, float]) -> np.ndarray | None:
     if not item_weights:
         return None
@@ -800,18 +807,24 @@ def search_items(
 
 
 @app.get("/profile")
-def profile():
+def profile(include_vibes: bool = Query(False)):
     current_profile = load_profile()
     current_profile["catalog_matches"] = {
-        "liked": len(catalog_indexes_for_ids(current_profile["liked"])),
-        "disliked": len(catalog_indexes_for_ids(current_profile["disliked"])),
-        "favorites": len(catalog_indexes_for_ids(current_profile["favorites"])),
-        "watchlist": len(catalog_indexes_for_ids(current_profile["watchlist"])),
-        "seen": len(catalog_indexes_for_ids(current_profile["seen"])),
-        "rated": len(catalog_indexes_for_ids(list(current_profile["ratings"].keys()))),
+        "liked": base_catalog_match_count(current_profile["liked"]),
+        "disliked": base_catalog_match_count(current_profile["disliked"]),
+        "favorites": base_catalog_match_count(current_profile["favorites"]),
+        "watchlist": base_catalog_match_count(current_profile["watchlist"]),
+        "seen": base_catalog_match_count(current_profile["seen"]),
+        "rated": base_catalog_match_count(list(current_profile["ratings"].keys())),
     }
-    current_profile["top_vibes"] = top_vibe_presets()
+    if include_vibes:
+        current_profile["top_vibes"] = top_vibe_presets()
     return current_profile
+
+
+@app.get("/profile/top-vibes")
+def profile_top_vibes():
+    return {"top_vibes": top_vibe_presets()}
 
 
 def update_profile_list(
@@ -998,7 +1011,7 @@ def profile_list_items(
 ):
     current_profile = load_profile()
     item_ids = current_profile[list_name][:limit]
-    catalog_df = get_catalog()
+    catalog_df = get_base_catalog()
     rows = catalog_df[catalog_df["id"].isin(item_ids)]
     by_id = {
         row["id"]: {

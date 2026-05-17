@@ -162,14 +162,6 @@ function renderProfile(profile) {
     ["Seen", matches.seen || 0],
   ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
 
-  topVibes.innerHTML = "";
-  (profile.top_vibes || []).forEach((vibe) => {
-    const chip = document.createElement("span");
-    chip.className = "vibe-chip";
-    chip.textContent = vibe.score === null ? vibe.name : `${vibe.name} ${vibe.score}`;
-    topVibes.appendChild(chip);
-  });
-
   manualVibes.innerHTML = "";
   (profile.vibes || []).forEach((vibe) => {
     const chip = document.createElement("button");
@@ -190,13 +182,38 @@ async function loadProfile() {
 }
 
 async function loadWatchlist() {
-  const data = await request("/profile/lists/watchlist");
-  renderItems(watchlist, data.results || [], "No watchlist items yet.");
+  try {
+    const data = await request("/profile/lists/watchlist");
+    renderItems(watchlist, data.results || [], "No watchlist items yet.");
+  } catch (error) {
+    renderItems(watchlist, [], `Watchlist unavailable: ${error.message}`);
+  }
+}
+
+async function loadTopVibes() {
+  topVibes.innerHTML = "<span class=\"vibe-chip\">Analyzing</span>";
+  try {
+    const data = await request("/profile/top-vibes");
+    topVibes.innerHTML = "";
+    (data.top_vibes || []).forEach((vibe) => {
+      const chip = document.createElement("span");
+      chip.className = "vibe-chip";
+      chip.textContent = vibe.score === null ? vibe.name : `${vibe.name} ${vibe.score}`;
+      topVibes.appendChild(chip);
+    });
+  } catch (error) {
+    topVibes.innerHTML = "";
+    const chip = document.createElement("span");
+    chip.className = "vibe-chip";
+    chip.textContent = "Vibes unavailable";
+    topVibes.appendChild(chip);
+  }
 }
 
 async function refreshAll() {
   await loadProfile();
   await loadWatchlist();
+  loadTopVibes();
 }
 
 async function repeatSearch() {
@@ -257,5 +274,7 @@ importButton.addEventListener("click", async () => {
 });
 
 refreshAll().catch((error) => {
-  searchResults.innerHTML = `<p>${error.message}</p>`;
+  const text = `TasteSpace API unavailable: ${error.message}`;
+  searchResults.innerHTML = `<p>${text}</p>`;
+  profileStats.innerHTML = `<div class="stat"><strong>Offline</strong><span>API</span></div>`;
 });
