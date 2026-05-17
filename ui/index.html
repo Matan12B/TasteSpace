@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TasteSpace</title>
+    <link rel="stylesheet" href="/ui-static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>TasteSpace</h1>
+      </div>
+      <a class="manifest-link" href="/manifest.json">Manifest</a>
+    </header>
+
+    <main class="layout">
+      <section class="panel search-panel">
+        <div class="section-head">
+          <div>
+            <h2>Rate Titles</h2>
+          </div>
+        </div>
+
+        <form id="search-form" class="search-form">
+          <input id="search-query" name="query" type="search" placeholder="Search Se7en, Fight Club, The Bear..." autocomplete="off">
+          <select id="search-type" name="type" aria-label="Type">
+            <option value="all">All</option>
+            <option value="movie">Movies</option>
+            <option value="series">Series</option>
+          </select>
+          <button type="submit">Search</button>
+        </form>
+
+        <div id="search-results" class="results"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+            <h2>Taste DNA</h2>
+            </div>
+          </div>
+          <div id="profile-stats" class="stats"></div>
+          <div id="top-vibes" class="vibes"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+            <h2>Import</h2>
+            </div>
+          </div>
+          <div class="import-controls">
+            <select id="import-source" aria-label="Import source">
+              <option value="imdb">IMDb</option>
+              <option value="letterboxd">Letterboxd</option>
+            </select>
+            <input id="import-file" type="file" accept=".csv,text/csv">
+            <button id="import-button" type="button">Import CSV</button>
+          </div>
+          <p id="import-status" class="status"></p>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+            <h2>Manual Vibes</h2>
+            </div>
+          </div>
+          <form id="vibe-form" class="vibe-form">
+            <input id="vibe-input" type="text" placeholder="slow atmospheric sci-fi">
+            <button type="submit">Add</button>
+          </form>
+          <div id="manual-vibes" class="manual-vibes"></div>
+        </section>
+      </aside>
+
+      <section class="panel list-panel">
+        <div class="section-head">
+          <div>
+            <h2>Watchlist</h2>
+          </div>
+        </div>
+        <div id="watchlist" class="results compact"></div>
+      </section>
+    </main>
+
+    <script src="/ui-static/app.js"></script>
+  </body>
+</html>
