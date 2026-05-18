@@ -20,6 +20,7 @@ APP_PORT = int(os.environ.get("TASTESPACE_APP_PORT", "8000"))
 CONTROL_PORT = int(os.environ.get("TASTESPACE_CONTROL_PORT", "9000"))
 APP_HOST = os.environ.get("TASTESPACE_APP_HOST", "0.0.0.0")
 CONTROL_HOST = os.environ.get("TASTESPACE_CONTROL_HOST", "0.0.0.0")
+ALLOW_SLEEP = os.environ.get("TASTESPACE_ALLOW_SLEEP", "0") == "1"
 
 
 def python_executable() -> str:
@@ -148,6 +149,13 @@ def stop_app() -> dict:
 
 
 def sleep_pc() -> dict:
+    if not ALLOW_SLEEP:
+        return {
+            "changed": False,
+            "message": "Sleep is disabled. Set TASTESPACE_ALLOW_SLEEP=1 to enable it.",
+            **status_payload(None),
+        }
+
     system = platform.system()
     if system == "Windows":
         command = ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"]
@@ -168,6 +176,7 @@ def status_payload(host_header: str | None) -> dict:
         "pid": pid if running else None,
         "app_port": APP_PORT,
         "control_port": CONTROL_PORT,
+        "sleep_enabled": ALLOW_SLEEP,
         "urls": server_urls(host_header),
     }
 
@@ -193,6 +202,8 @@ HTML = """<!doctype html>
     .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
     button, a { border:1px solid var(--line); border-radius:8px; background:#252d33; color:var(--text); min-height:44px; padding:10px 12px; font:inherit; text-decoration:none; text-align:center; cursor:pointer; }
     button:hover, a:hover { border-color:#d7a84d; }
+    button:disabled { cursor:not-allowed; opacity:.55; }
+    button:disabled:hover { border-color:var(--line); }
     button.stop { color:var(--warn); }
     button.sleep { color:var(--bad); }
     .links { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
@@ -215,7 +226,7 @@ HTML = """<!doctype html>
         <button data-action="start">Start</button>
         <button class="stop" data-action="stop">Stop</button>
         <button data-action="restart">Restart</button>
-        <button class="sleep" data-action="sleep">Sleep PC</button>
+        <button id="sleep" class="sleep" data-action="sleep">Sleep PC</button>
       </div>
       <div class="links">
         <a id="ui" href="#">TasteSpace UI</a>
@@ -251,6 +262,16 @@ HTML = """<!doctype html>
         document.querySelector('#ui').href = data.urls.ui;
         document.querySelector('#manifest').href = data.urls.manifest;
       }
+      const sleep = document.querySelector('#sleep');
+      if (data.sleep_enabled === false) {
+        sleep.disabled = true;
+        sleep.textContent = 'Sleep Disabled';
+        sleep.title = 'Set TASTESPACE_ALLOW_SLEEP=1 to enable this action.';
+      } else {
+        sleep.disabled = false;
+        sleep.textContent = 'Sleep PC';
+        sleep.title = '';
+      }
     }
     async function refresh() {
       if (!tokenInput.value.trim()) return;
@@ -272,19 +293,25 @@ HTML = """<!doctype html>
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def send_html(self) -> None:
         body = HTML.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def authorized(self, query: dict[str, list[str]]) -> bool:
         values = query.get("token", [])
@@ -342,9 +369,17 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address) -> None:
+        _, error, _ = sys.exc_info()
+        if isinstance(error, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def main() -> int:
     token = control_token()
-    server = ThreadingHTTPServer((CONTROL_HOST, CONTROL_PORT), Handler)
+    server = QuietThreadingHTTPServer((CONTROL_HOST, CONTROL_PORT), Handler)
     print(f"TasteSpace control: http://0.0.0.0:{CONTROL_PORT}")
     print(f"Control token: {token}")
     server.serve_forever()

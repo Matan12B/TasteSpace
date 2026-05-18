@@ -39,8 +39,8 @@ On macOS/Linux:
 ./scripts/start_control_server.sh
 ```
 
-The control server listens on port `9000` and can start, stop, restart, and put
-the PC to sleep. It prints a control token when it starts and also stores it at:
+The control server listens on port `9000` and can start, stop, and restart
+TasteSpace. It prints a control token when it starts and also stores it at:
 
 ```txt
 data/control_token.txt
@@ -69,10 +69,15 @@ TASTESPACE_CONTROL_PORT=9000
 TASTESPACE_APP_PORT=8000
 TASTESPACE_CONTROL_TOKEN=choose-your-own-token
 TASTESPACE_OFFLINE=1
+TASTESPACE_ALLOW_SLEEP=1
 ```
 
 Set `TASTESPACE_OFFLINE=1` only after the sentence-transformers model is already
 downloaded on that machine.
+
+Sleep is disabled by default because some Windows GPU/driver setups fail during
+forced sleep. Only set `TASTESPACE_ALLOW_SLEEP=1` if sleep/resume is stable on
+your PC.
 
 ## Import TMDB Catalog
 
