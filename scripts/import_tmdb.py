@@ -33,6 +33,24 @@ KEYWORD_BLOCKLIST = {
     "3d animation",
 }
 SourceSpec = tuple[str, str, dict[str, Any]]
+DISCOVER_SORTS = [
+    "popularity.desc",
+    "vote_count.desc",
+    "vote_average.desc",
+    "primary_release_date.desc",
+]
+DISCOVER_LANGUAGES = [
+    "en",
+    "ja",
+    "ko",
+    "fr",
+    "es",
+    "de",
+    "it",
+    "hi",
+    "zh",
+    "pt",
+]
 
 
 def load_dotenv(path: Path) -> None:
@@ -140,15 +158,21 @@ def discover_params(
     min_votes: int,
     year_range: tuple[int, int] | None = None,
     genre_id: int | None = None,
+    sort_by: str = "popularity.desc",
+    original_language: str | None = None,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {
         "include_adult": "false",
         "include_video": "false",
-        "sort_by": "popularity.desc",
+        "sort_by": sort_by,
         "vote_count.gte": min_votes,
     }
+    if sort_by == "vote_average.desc":
+        params["vote_average.gte"] = 5
     if genre_id is not None:
         params["with_genres"] = genre_id
+    if original_language:
+        params["with_original_language"] = original_language
 
     if year_range is not None:
         start_year, end_year = year_range
@@ -172,25 +196,64 @@ def tmdb_sources(
         return sources
 
     for media_type, endpoint in (("movie", "discover/movie"), ("series", "discover/tv")):
-        sources.append((media_type, endpoint, discover_params(media_type, min_votes)))
+        vote_tiers = sorted({min_votes, max(1, min_votes // 2), max(1, min_votes // 4)}, reverse=True)
+        for sort_by in DISCOVER_SORTS:
+            for votes in vote_tiers:
+                sources.append(
+                    (
+                        media_type,
+                        endpoint,
+                        discover_params(media_type, votes, sort_by=sort_by),
+                    )
+                )
 
         for year_range in year_windows():
-            sources.append(
-                (
-                    media_type,
-                    endpoint,
-                    discover_params(media_type, min_votes, year_range=year_range),
-                )
-            )
+            for sort_by in ("popularity.desc", "vote_count.desc"):
+                for votes in vote_tiers:
+                    sources.append(
+                        (
+                            media_type,
+                            endpoint,
+                            discover_params(
+                                media_type,
+                                votes,
+                                year_range=year_range,
+                                sort_by=sort_by,
+                            ),
+                        )
+                    )
 
         for genre_id in genres_by_type[media_type]:
-            sources.append(
-                (
-                    media_type,
-                    endpoint,
-                    discover_params(media_type, min_votes, genre_id=genre_id),
-                )
-            )
+            for sort_by in ("popularity.desc", "vote_count.desc", "vote_average.desc"):
+                for votes in vote_tiers:
+                    sources.append(
+                        (
+                            media_type,
+                            endpoint,
+                            discover_params(
+                                media_type,
+                                votes,
+                                genre_id=genre_id,
+                                sort_by=sort_by,
+                            ),
+                        )
+                    )
+
+        for original_language in DISCOVER_LANGUAGES:
+            for sort_by in ("popularity.desc", "vote_count.desc"):
+                for votes in vote_tiers:
+                    sources.append(
+                        (
+                            media_type,
+                            endpoint,
+                            discover_params(
+                                media_type,
+                                votes,
+                                sort_by=sort_by,
+                                original_language=original_language,
+                            ),
+                        )
+                    )
 
     return sources
 
@@ -457,10 +520,14 @@ def import_catalog(
         if params.get("with_genres"):
             genre_name = genres_by_type[media_type].get(int(params["with_genres"]), params["with_genres"])
             source_label = f"{endpoint} genre={genre_name}"
+        elif params.get("with_original_language"):
+            source_label = f"{endpoint} language={params['with_original_language']}"
         elif params.get("primary_release_date.gte") or params.get("first_air_date.gte"):
             start = params.get("primary_release_date.gte") or params.get("first_air_date.gte")
             end = params.get("primary_release_date.lte") or params.get("first_air_date.lte")
             source_label = f"{endpoint} years={str(start)[:4]}-{str(end)[:4]}"
+        if params.get("sort_by"):
+            source_label = f"{source_label} sort={params['sort_by']} votes>={params.get('vote_count.gte')}"
 
         print(f"Fetching {source_label}...", file=sys.stderr)
         source_items = fetch_source_items(api_key, media_type, endpoint, params, pages, language)

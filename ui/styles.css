@@ -60,7 +60,18 @@ p {
   line-height: 1.45;
 }
 
-.manifest-link,
+.top-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.copy-status {
+  color: var(--ok);
+  font-size: 13px;
+  min-width: 48px;
+}
+
 button {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -72,8 +83,7 @@ button {
   text-decoration: none;
 }
 
-button:hover,
-.manifest-link:hover {
+button:hover {
   border-color: var(--accent);
 }
 
@@ -101,6 +111,10 @@ button:hover,
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.helper {
+  margin-top: 4px;
 }
 
 .search-form,

@@ -4,6 +4,21 @@ AI-powered movie and TV recommendation backend for Stremio.
 
 ## Run Locally
 
+On Windows:
+
+```bat
+scripts\start_tastespace.bat
+```
+
+Stop/restart:
+
+```bat
+scripts\stop_tastespace.bat
+scripts\restart_tastespace.bat
+```
+
+On macOS/Linux:
+
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
 ```
@@ -112,8 +127,15 @@ On Windows:
 ```
 
 The importer uses trending/popular/top-rated lists plus TMDB discover sources by
-year windows and genre. `--limit` is still a ceiling; if you want broader
-coverage, increase `--pages`, lower `--min-votes`, or both.
+year windows, genre, sort order, vote-count tier, and original language.
+`--limit` is still a ceiling; if you want broader coverage, increase `--pages`,
+lower `--min-votes`, or both.
+
+For a larger run:
+
+```bat
+.venv\Scripts\python.exe scripts\import_tmdb.py --pages 40 --limit 15000 --min-votes 10
+```
 
 This writes normalized TMDB items to:
 

@@ -8,6 +8,8 @@ const libraryList = document.querySelector("#library-list");
 const importButton = document.querySelector("#import-button");
 const importStatus = document.querySelector("#import-status");
 const vibeForm = document.querySelector("#vibe-form");
+const copyManifestButton = document.querySelector("#copy-manifest");
+const copyStatus = document.querySelector("#copy-status");
 
 let currentProfile = null;
 let activeLibrary = "watchlist";
@@ -332,6 +334,27 @@ if (importButton) {
     } catch (error) {
       importStatus.textContent = `Import failed: ${error.message}`;
     }
+  });
+}
+
+if (copyManifestButton) {
+  copyManifestButton.addEventListener("click", async () => {
+    const manifestUrl = `${window.location.origin}/manifest.json`;
+    try {
+      await navigator.clipboard.writeText(manifestUrl);
+      copyStatus.textContent = "Copied";
+    } catch {
+      const fallback = document.createElement("input");
+      fallback.value = manifestUrl;
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand("copy");
+      fallback.remove();
+      copyStatus.textContent = "Copied";
+    }
+    window.setTimeout(() => {
+      copyStatus.textContent = "";
+    }, 1800);
   });
 }
 
