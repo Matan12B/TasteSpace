@@ -56,14 +56,18 @@ function renderStars(item) {
   const stars = document.createElement("div");
   stars.className = "stars";
 
-  for (let value = 0.5; value <= 5; value += 0.5) {
+  for (let value = 1; value <= 5; value += 1) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `star half-star ${value <= rating ? "active" : ""}`;
-    button.textContent = value % 1 === 0 ? "★" : "☆";
-    button.title = `Rate ${value}`;
-    button.addEventListener("click", async () => {
-      await request(`/profile/ratings/${item.id}?rating=${value}`, { method: "POST" });
+    const fill = Math.max(0, Math.min(1, rating - (value - 1)));
+    button.className = "star";
+    button.innerHTML = `<span class="star-empty">★</span><span class="star-fill" style="width:${fill * 100}%">★</span>`;
+    button.title = `Rate ${value - 0.5} or ${value}`;
+    button.addEventListener("click", async (event) => {
+      const rect = button.getBoundingClientRect();
+      const clickRatio = (event.clientX - rect.left) / rect.width;
+      const selected = value - (clickRatio <= 0.5 ? 0.5 : 0);
+      await request(`/profile/ratings/${item.id}?rating=${selected}`, { method: "POST" });
       await refreshAll();
       await repeatSearch();
     });

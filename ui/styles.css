@@ -230,13 +230,31 @@ select:focus {
   background: transparent;
   color: #727a80;
   min-height: 30px;
-  width: 22px;
-  font-size: 15px;
+  width: 30px;
+  font-size: 18px;
+  line-height: 1;
   padding: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.star.active {
+.star-empty,
+.star-fill {
+  display: block;
+  pointer-events: none;
+}
+
+.star-empty {
+  color: #727a80;
+}
+
+.star-fill {
   color: var(--accent-strong);
+  left: 0;
+  overflow: hidden;
+  position: absolute;
+  top: 6px;
+  white-space: nowrap;
 }
 
 .small {
