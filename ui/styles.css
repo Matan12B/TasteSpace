@@ -215,46 +215,36 @@ select:focus {
   gap: 8px;
 }
 
-.stars {
+.rating-scale {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 3px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-.star {
+.rating-pill {
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: #727a80;
   min-height: 30px;
-  width: 30px;
-  font-size: 18px;
-  line-height: 1;
+  min-width: 28px;
+  font-size: 13px;
+  font-weight: 700;
   padding: 0;
-  position: relative;
-  overflow: hidden;
 }
 
-.star-empty,
-.star-fill {
-  display: block;
-  pointer-events: none;
-}
-
-.star-empty {
-  color: #727a80;
-}
-
-.star-fill {
+.rating-pill.active {
+  background: rgba(216, 179, 90, .18);
   color: var(--accent-strong);
-  left: 0;
-  overflow: hidden;
-  position: absolute;
-  top: 6px;
-  white-space: nowrap;
+}
+
+.rating-pill:hover {
+  color: var(--accent-strong);
 }
 
 .small {

@@ -730,7 +730,7 @@ def stremio_catalog(media_type: str, catalog_id: str, extra: str | None = None) 
 @app.get("/manifest.json")
 def stremio_manifest():
     catalogs = []
-    top_vibes = top_vibe_presets()
+    top_vibes = VIBE_PRESETS[:4]
     for media_type, label in (("movie", "Movies"), ("series", "Series")):
         catalogs.append(
             {

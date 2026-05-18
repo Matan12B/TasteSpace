@@ -50,37 +50,42 @@ function latestState(itemId) {
   };
 }
 
-function renderStars(item) {
+function renderRating(item) {
   const state = itemState(item);
   const rating = Number(state.rating || 0);
-  const stars = document.createElement("div");
-  stars.className = "stars";
+  const ratingControl = document.createElement("div");
+  ratingControl.className = "rating-scale";
 
-  for (let value = 1; value <= 5; value += 1) {
+  for (let value = 1; value <= 10; value += 1) {
     const button = document.createElement("button");
     button.type = "button";
-    const fill = Math.max(0, Math.min(1, rating - (value - 1)));
-    button.className = "star";
-    button.innerHTML = `<span class="star-empty">★</span><span class="star-fill" style="width:${fill * 100}%">★</span>`;
-    button.title = `Rate ${value - 0.5} or ${value}`;
-    button.addEventListener("click", async (event) => {
-      const rect = button.getBoundingClientRect();
-      const clickRatio = (event.clientX - rect.left) / rect.width;
-      const selected = value - (clickRatio <= 0.5 ? 0.5 : 0);
-      await request(`/profile/ratings/${item.id}?rating=${selected}`, { method: "POST" });
-      await refreshAll();
-      await repeatSearch();
+    button.className = `rating-pill ${value <= rating * 2 ? "active" : ""}`;
+    button.textContent = value;
+    button.title = `Rate ${value}/10`;
+    button.addEventListener("click", async () => {
+      const selected = value / 2;
+      try {
+        await request(`/profile/ratings/${item.id}?rating=${selected}`, { method: "POST" });
+        await refreshAll();
+        await repeatSearch();
+      } catch (error) {
+        searchResults.innerHTML = `<p>Rating failed: ${error.message}</p>`;
+      }
     });
-    stars.appendChild(button);
+    ratingControl.appendChild(button);
   }
 
-  return stars;
+  return ratingControl;
 }
 
 async function clearRating(item) {
-  await request(`/profile/ratings/${item.id}`, { method: "DELETE" });
-  await refreshAll();
-  await repeatSearch();
+  try {
+    await request(`/profile/ratings/${item.id}`, { method: "DELETE" });
+    await refreshAll();
+    await repeatSearch();
+  } catch (error) {
+    searchResults.innerHTML = `<p>Clear rating failed: ${error.message}</p>`;
+  }
 }
 
 function actionButton(label, active, onClick, danger = false) {
@@ -125,7 +130,7 @@ function renderItem(item) {
 
   const actions = document.createElement("div");
   actions.className = "actions";
-  actions.appendChild(renderStars(item));
+  actions.appendChild(renderRating(item));
   if (state.rating) {
     const clearButton = actionButton("Clear rating", false, async () => {
       await clearRating(item);
