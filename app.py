@@ -263,12 +263,12 @@ def load_profile() -> dict[str, Any]:
     ratings = raw_profile.get("ratings", {})
     if isinstance(ratings, dict):
         profile["ratings"] = {
-            item_id.strip(): int(rating)
+            item_id.strip(): float(rating)
             for item_id, rating in ratings.items()
             if isinstance(item_id, str)
             and item_id.strip()
             and isinstance(rating, (int, float))
-            and 1 <= int(rating) <= 5
+            and 0.5 <= float(rating) <= 5
         }
     return profile
 
@@ -455,7 +455,7 @@ def disliked_item_ids(profile: dict[str, Any]) -> set[str]:
     disliked.update(
         item_id
         for item_id, rating in profile["ratings"].items()
-        if int(rating) <= 2
+        if float(rating) <= 2
     )
     return disliked
 
@@ -946,17 +946,22 @@ def update_profile_list(
     return save_profile(current_profile)
 
 
-def rate_profile_item(item_id: str, rating: int) -> dict[str, Any]:
+def normalize_rating_value(rating: float) -> float:
+    return max(0.5, min(5.0, round(float(rating) * 2) / 2))
+
+
+def rate_profile_item(item_id: str, rating: float) -> dict[str, Any]:
     ensure_catalog_item(item_id)
-    if rating < 1 or rating > 5:
-        raise HTTPException(status_code=400, detail="Rating must be from 1 to 5.")
+    if rating < 0.5 or rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be from 0.5 to 5.")
 
     current_profile = load_profile()
-    apply_rating_to_profile(current_profile, item_id, rating)
+    apply_rating_to_profile(current_profile, item_id, normalize_rating_value(rating))
     return save_profile(current_profile)
 
 
-def apply_rating_to_profile(profile: dict[str, Any], item_id: str, rating: int) -> dict[str, Any]:
+def apply_rating_to_profile(profile: dict[str, Any], item_id: str, rating: float) -> dict[str, Any]:
+    rating = normalize_rating_value(rating)
     profile["ratings"][item_id] = rating
     if item_id not in profile["seen"]:
         profile["seen"].append(item_id)
@@ -1052,7 +1057,7 @@ def remove_seen_item(item_id: str):
 
 
 @app.post("/profile/ratings/{item_id}")
-def rate_item(item_id: str, rating: int = Query(..., ge=1, le=5)):
+def rate_item(item_id: str, rating: float = Query(..., ge=0.5, le=5)):
     return rate_profile_item(item_id, rating)
 
 
@@ -1114,7 +1119,7 @@ def find_row_value(row: dict[str, str], names: tuple[str, ...]) -> str | None:
     return None
 
 
-def parse_csv_rating(value: str | None, source: str) -> int | None:
+def parse_csv_rating(value: str | None, source: str) -> float | None:
     if not value:
         return None
 
@@ -1128,7 +1133,7 @@ def parse_csv_rating(value: str | None, source: str) -> int | None:
     if source == "imdb":
         raw_rating = raw_rating / 2.0
 
-    return max(1, min(5, int(raw_rating + 0.5)))
+    return normalize_rating_value(raw_rating)
 
 
 def parse_csv_favorite(row: dict[str, str], source: str) -> bool:

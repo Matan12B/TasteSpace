@@ -96,7 +96,7 @@ class TasteSpaceAppTests(unittest.TestCase):
                         "watchlist": ["tt0137523"],
                         "seen": ["tt0114369"],
                         "vibes": ["dark psychological thriller"],
-                        "ratings": {"tt0468569": 5},
+                        "ratings": {"tt0468569": 4.5},
                     }
                 )
                 profile = load_profile()
@@ -107,12 +107,12 @@ class TasteSpaceAppTests(unittest.TestCase):
         self.assertEqual(profile["watchlist"], ["tt0137523"])
         self.assertEqual(profile["seen"], ["tt0114369"])
         self.assertEqual(profile["vibes"], ["dark psychological thriller"])
-        self.assertEqual(profile["ratings"], {"tt0468569": 5})
+        self.assertEqual(profile["ratings"], {"tt0468569": 4.5})
 
     def test_csv_rating_parsing(self):
         self.assertEqual(parse_csv_rating("10", "imdb"), 5)
-        self.assertEqual(parse_csv_rating("7", "imdb"), 4)
-        self.assertEqual(parse_csv_rating("4.5", "letterboxd"), 5)
+        self.assertEqual(parse_csv_rating("7", "imdb"), 3.5)
+        self.assertEqual(parse_csv_rating("4.5", "letterboxd"), 4.5)
         self.assertIsNone(parse_csv_rating("", "letterboxd"))
 
     def test_csv_favorite_parsing(self):

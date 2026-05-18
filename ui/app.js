@@ -56,11 +56,11 @@ function renderStars(item) {
   const stars = document.createElement("div");
   stars.className = "stars";
 
-  for (let value = 1; value <= 5; value += 1) {
+  for (let value = 0.5; value <= 5; value += 0.5) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `star ${value <= rating ? "active" : ""}`;
-    button.textContent = "★";
+    button.className = `star half-star ${value <= rating ? "active" : ""}`;
+    button.textContent = value % 1 === 0 ? "★" : "☆";
     button.title = `Rate ${value}`;
     button.addEventListener("click", async () => {
       await request(`/profile/ratings/${item.id}?rating=${value}`, { method: "POST" });
@@ -176,6 +176,9 @@ function renderItems(container, items, emptyText) {
 
 function renderProfile(profile) {
   currentProfile = profile;
+  if (!profileStats) {
+    return;
+  }
   const matches = profile.catalog_matches || {};
   profileStats.innerHTML = "";
   Object.entries(libraries).forEach(([key, config]) => {
@@ -191,6 +194,9 @@ function renderProfile(profile) {
     profileStats.appendChild(button);
   });
 
+  if (!manualVibes) {
+    return;
+  }
   manualVibes.innerHTML = "";
   (profile.vibes || []).forEach((vibe) => {
     const chip = document.createElement("button");
@@ -211,6 +217,9 @@ async function loadProfile() {
 }
 
 async function loadLibrary() {
+  if (!libraryTitle || !libraryList) {
+    return;
+  }
   try {
     const label = libraries[activeLibrary]?.label || "Library";
     libraryTitle.textContent = label;
@@ -222,6 +231,9 @@ async function loadLibrary() {
 }
 
 async function loadTopVibes() {
+  if (!topVibes) {
+    return;
+  }
   topVibes.innerHTML = "<span class=\"vibe-chip\">Analyzing</span>";
   try {
     const data = await request("/profile/top-vibes");
@@ -260,52 +272,64 @@ async function runSearch(query, type) {
   renderItems(searchResults, data.results || [], "No local catalog matches.");
 }
 
-searchForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const query = document.querySelector("#search-query").value.trim();
-  if (!query) {
-    return;
-  }
-  await runSearch(query, document.querySelector("#search-type").value);
-});
+if (searchForm) {
+  searchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const query = document.querySelector("#search-query").value.trim();
+    if (!query) {
+      return;
+    }
+    try {
+      await runSearch(query, document.querySelector("#search-type").value);
+    } catch (error) {
+      searchResults.innerHTML = `<p>Search failed: ${error.message}</p>`;
+    }
+  });
+}
 
-vibeForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const input = document.querySelector("#vibe-input");
-  const vibe = input.value.trim();
-  if (!vibe) {
-    return;
-  }
-  await request(`/profile/vibes?vibe=${encodeURIComponent(vibe)}`, { method: "POST" });
-  input.value = "";
-  await refreshAll();
-});
-
-importButton.addEventListener("click", async () => {
-  const file = document.querySelector("#import-file").files[0];
-  const source = document.querySelector("#import-source").value;
-  if (!file) {
-    importStatus.textContent = "Choose a CSV file first.";
-    return;
-  }
-
-  try {
-    importStatus.textContent = "Importing...";
-    const text = await file.text();
-    const result = await request(`/profile/import/${source}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: text,
-    });
-    importStatus.textContent = `Imported ${result.imported_ratings} ratings, ${result.imported_favorites} hearts, ${result.imported_watchlist} watchlist items, ${result.unmatched} unmatched, ${result.skipped_episodes} episodes skipped.`;
+if (vibeForm) {
+  vibeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = document.querySelector("#vibe-input");
+    const vibe = input.value.trim();
+    if (!vibe) {
+      return;
+    }
+    await request(`/profile/vibes?vibe=${encodeURIComponent(vibe)}`, { method: "POST" });
+    input.value = "";
     await refreshAll();
-  } catch (error) {
-    importStatus.textContent = `Import failed: ${error.message}`;
-  }
-});
+  });
+}
+
+if (importButton) {
+  importButton.addEventListener("click", async () => {
+    const file = document.querySelector("#import-file").files[0];
+    const source = document.querySelector("#import-source").value;
+    if (!file) {
+      importStatus.textContent = "Choose a CSV file first.";
+      return;
+    }
+
+    try {
+      importStatus.textContent = "Importing...";
+      const text = await file.text();
+      const result = await request(`/profile/import/${source}`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: text,
+      });
+      importStatus.textContent = `Imported ${result.imported_ratings} ratings, ${result.imported_favorites} hearts, ${result.imported_watchlist} watchlist items, ${result.unmatched} unmatched, ${result.skipped_episodes} episodes skipped.`;
+      await refreshAll();
+    } catch (error) {
+      importStatus.textContent = `Import failed: ${error.message}`;
+    }
+  });
+}
 
 refreshAll().catch((error) => {
   const text = `TasteSpace API unavailable: ${error.message}`;
   searchResults.innerHTML = `<p>${text}</p>`;
-  profileStats.innerHTML = `<div class="stat"><strong>Offline</strong><span>API</span></div>`;
+  if (profileStats) {
+    profileStats.innerHTML = `<div class="stat"><strong>Offline</strong><span>API</span></div>`;
+  }
 });
