@@ -232,7 +232,7 @@ async function loadLibrary() {
   try {
     const label = libraries[activeLibrary]?.label || "Library";
     libraryTitle.textContent = label;
-    const data = await request(`/profile/lists/${activeLibrary}`);
+    const data = await request(`/profile/lists/${activeLibrary}?limit=500`);
     renderItems(libraryList, data.results || [], `No ${label.toLowerCase()} items yet.`);
   } catch (error) {
     renderItems(libraryList, [], `List unavailable: ${error.message}`);

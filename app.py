@@ -1085,15 +1085,22 @@ def item_profile_state(item_id: str):
 @app.get("/profile/lists/{list_name}")
 def profile_list_items(
     list_name: Literal["liked", "disliked", "favorites", "watchlist", "seen", "rated"],
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(200, ge=1, le=1000),
+    skip: int = Query(0, ge=0),
+    query: str | None = Query(None, min_length=1),
 ):
     current_profile = load_profile()
     if list_name == "rated":
-        item_ids = list(current_profile["ratings"].keys())[:limit]
+        item_ids = list(current_profile["ratings"].keys())
     else:
-        item_ids = current_profile[list_name][:limit]
+        item_ids = current_profile[list_name]
     catalog_df = get_base_catalog()
     rows = catalog_df[catalog_df["id"].isin(item_ids)]
+    if query:
+        query_text = query.casefold()
+        rows = rows[
+            rows["name"].apply(lambda value: query_text in normalize_text(value).casefold())
+        ]
     by_id = {
         row["id"]: {
             **row_to_result(row),
@@ -1101,13 +1108,17 @@ def profile_list_items(
         }
         for _, row in rows.iterrows()
     }
+    ordered = [
+        by_id[item_id]
+        for item_id in item_ids
+        if item_id in by_id
+    ]
     return {
         "list": list_name,
-        "results": [
-            by_id[item_id]
-            for item_id in item_ids
-            if item_id in by_id
-        ],
+        "total": len(ordered),
+        "skip": skip,
+        "limit": limit,
+        "results": ordered[skip:skip + limit],
     }
 
 
